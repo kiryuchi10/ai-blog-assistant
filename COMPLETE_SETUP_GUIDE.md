@@ -63,13 +63,6 @@ python setup_redis.py
 
 ### **3. Environment Configuration**
 
-Your `.env` file is already configured with:
-- ✅ **OpenAI API Key**: `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`
-- ✅ **DeepSeek API Key**: `sk-secret_paper2code_19b17f0104b94a68a762cf749f197f6e.lN8vaEkP5IZSzJqoMhzVwKC77QcQJ5Ip`
-- ✅ **Redis Password**: `A5f4gsadzs2shne87cgr63z64mam99k45zmpdjmfkjt25zqdywh`
-- ✅ **Email Configuration**: `donghyeunlee1@gmail.com`
-- ✅ **Database Configuration**: PostgreSQL settings
-
 ### **4. Backend Dependencies**
 
 ```bash
