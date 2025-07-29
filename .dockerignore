@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pytest_cache/
+.mypy_cache/
+
+# Virtualenvs
+.venv/
+venv/
+
+# Git
+.git
+.gitignore
+
+# Node (if present in repo root or backend)
+node_modules/
+npm-debug.log
+yarn.lock
+pnpm-lock.yaml
+
+# OS / Editors
+.DS_Store
+*.swp
+.idea/
+.vscode/
+
+# Local data / artifacts
+logs/
+*.log
+*.db
+.cache/
+dist/
+build/
+
+# Docker
+Dockerfile*
+docker-compose*.yml

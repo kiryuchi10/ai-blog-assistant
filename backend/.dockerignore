@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pytest_cache/
+.mypy_cache/
+
+# Virtualenvs
+.venv/
+venv/
+env/
+
+# Git
+.git
+.gitignore
+
+# Node (if present)
+node_modules/
+npm-debug.log
+
+# OS / Editors
+.DS_Store
+*.swp
+.idea/
+.vscode/
+
+# Local data / artifacts
+logs/
+*.log
+*.db
+.cache/
+dist/
+build/
+test.db
+
+# Docker
+Dockerfile*
+docker-compose*.yml
+
+# Development files
+start.bat
+demo_server.py
+simple_*.py
+run_server.py

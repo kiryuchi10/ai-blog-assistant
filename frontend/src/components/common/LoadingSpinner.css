@@ -1,0 +1,62 @@
+.loading-spinner {
+  @apply flex items-center justify-center;
+}
+
+/* Smooth animation for spinner */
+.loading-spinner svg {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Pulse animation for loading text */
+.loading-spinner .animate-pulse {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* Overlay styles */
+.loading-spinner-overlay {
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+}
+
+/* Theme-aware colors */
+.theme-dark .loading-spinner {
+  color: var(--text-primary);
+}
+
+.theme-light .loading-spinner {
+  color: var(--text-primary);
+}
+
+/* Accessibility */
+.loading-spinner[aria-hidden="true"] {
+  pointer-events: none;
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .loading-spinner svg {
+    animation: none;
+  }
+  
+  .loading-spinner .animate-pulse {
+    animation: none;
+  }
+}
