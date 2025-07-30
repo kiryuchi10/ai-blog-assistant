@@ -14,6 +14,7 @@ from app.core.database import get_db
 from app.core.auth_middleware import get_current_user
 from app.models.user import User
 from app.models.content import ContentTemplate
+from app.services.template_service import TemplateService
 from app.schemas.template import (
     TemplateCreateRequest,
     TemplateUpdateRequest,
@@ -37,25 +38,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-def _extract_placeholders(template_content: str) -> List[str]:
-    """Extract placeholder variables from template content"""
-    # Find placeholders in format {{variable_name}}
-    placeholders = re.findall(r'\{\{(\w+)\}\}', template_content)
-    return list(set(placeholders))  # Remove duplicates
 
-
-def _replace_placeholders(template_content: str, variables: Dict[str, str]) -> tuple[str, List[str], List[str]]:
-    """Replace placeholders in template content with provided variables"""
-    placeholders_found = _extract_placeholders(template_content)
-    placeholders_replaced = []
-    
-    content = template_content
-    for placeholder in placeholders_found:
-        if placeholder in variables:
-            content = content.replace(f'{{{{{placeholder}}}}}', variables[placeholder])
-            placeholders_replaced.append(placeholder)
-    
-    return content, placeholders_found, placeholders_replaced
 
 
 def _build_search_query(db: Session, search_request: TemplateSearchRequest, user: User):
@@ -133,8 +116,11 @@ async def create_template(
                 detail="Template with this name already exists"
             )
         
+        # Initialize template service
+        template_service = TemplateService(db)
+        
         # Extract placeholders from template content
-        placeholders = _extract_placeholders(request.template_content)
+        placeholders = template_service.extract_placeholders(request.template_content)
         
         # Create new template
         template = ContentTemplate(
@@ -323,7 +309,8 @@ async def update_template(
         
         # Update placeholders if template content changed
         if 'template_content' in update_data:
-            template.placeholders = _extract_placeholders(template.template_content)
+            template_service = TemplateService(db)
+            template.placeholders = template_service.extract_placeholders(template.template_content)
         
         template.updated_at = datetime.utcnow()
         
@@ -465,14 +452,22 @@ async def use_template(
         if not template:
             raise HTTPException(status_code=404, detail="Template not found")
         
+        # Initialize template service
+        template_service = TemplateService(db)
+        
         # Replace placeholders
-        generated_content, placeholders_found, placeholders_replaced = _replace_placeholders(
+        generated_content, placeholders_found, placeholders_replaced = template_service.replace_placeholders(
             template.template_content,
             request.variables
         )
         
-        # Update usage count in background
-        background_tasks.add_task(_increment_template_usage, template.id, db)
+        # Track usage in background
+        background_tasks.add_task(
+            template_service.track_template_usage,
+            template.id,
+            current_user.id,
+            request.variables
+        )
         
         logger.info(f"Template used: {template_id} by user {current_user.id}")
         
@@ -499,53 +494,13 @@ async def get_template_analytics(
 ):
     """Get analytics for a template"""
     try:
-        template = db.query(ContentTemplate).filter(
-            and_(
-                ContentTemplate.id == template_id,
-                ContentTemplate.created_by == current_user.id
-            )
-        ).first()
+        template_service = TemplateService(db)
+        analytics_data = template_service.get_template_analytics(template_id, current_user.id)
         
-        if not template:
+        if not analytics_data:
             raise HTTPException(status_code=404, detail="Template not found or not owned by user")
         
-        # Mock analytics data (in production, this would come from actual usage tracking)
-        now = datetime.utcnow()
-        month_ago = now - timedelta(days=30)
-        week_ago = now - timedelta(days=7)
-        
-        return TemplateAnalyticsResponse(
-            template_id=str(template.id),
-            template_name=template.name,
-            total_usage=template.usage_count,
-            usage_this_month=max(0, template.usage_count - 10),  # Mock data
-            usage_this_week=max(0, template.usage_count - 20),   # Mock data
-            average_rating=4.2,  # Mock data
-            total_ratings=15,    # Mock data
-            popular_variables={
-                "company_name": 25,
-                "product_name": 18,
-                "target_audience": 12
-            },
-            usage_by_industry={
-                "technology": 40,
-                "marketing": 30,
-                "business": 20,
-                "other": 10
-            },
-            recent_usage=[
-                {
-                    "date": (now - timedelta(days=1)).isoformat(),
-                    "user_id": "user123",
-                    "variables_used": ["company_name", "product_name"]
-                },
-                {
-                    "date": (now - timedelta(days=2)).isoformat(),
-                    "user_id": "user456",
-                    "variables_used": ["target_audience"]
-                }
-            ]
-        )
+        return TemplateAnalyticsResponse(**analytics_data)
         
     except HTTPException:
         raise
@@ -561,95 +516,8 @@ async def seed_default_templates(
 ):
     """Seed default templates (admin only or for development)"""
     try:
-        # This would typically be restricted to admin users
-        default_templates = [
-            {
-                "name": "Business Blog Post",
-                "description": "Professional business blog post template",
-                "template_content": """# {{title}}
-
-## Introduction
-{{company_name}} is excited to share insights about {{topic}}.
-
-## Main Content
-{{main_content}}
-
-## Key Benefits
-- {{benefit_1}}
-- {{benefit_2}}
-- {{benefit_3}}
-
-## Conclusion
-{{conclusion}}
-
----
-*About {{company_name}}: {{company_description}}*""",
-                "category": "business",
-                "template_type": "article",
-                "industry": "General",
-                "is_public": True,
-                "tags": ["business", "professional", "corporate"]
-            },
-            {
-                "name": "How-To Guide",
-                "description": "Step-by-step tutorial template",
-                "template_content": """# How to {{action}}
-
-## What You'll Need
-{{requirements}}
-
-## Step-by-Step Instructions
-
-### Step 1: {{step_1_title}}
-{{step_1_description}}
-
-### Step 2: {{step_2_title}}
-{{step_2_description}}
-
-### Step 3: {{step_3_title}}
-{{step_3_description}}
-
-## Tips and Best Practices
-{{tips}}
-
-## Conclusion
-{{conclusion}}""",
-                "category": "education",
-                "template_type": "how_to",
-                "industry": "General",
-                "is_public": True,
-                "tags": ["tutorial", "guide", "how-to"]
-            }
-        ]
-        
-        created_count = 0
-        for template_data in default_templates:
-            # Check if template already exists
-            existing = db.query(ContentTemplate).filter(
-                ContentTemplate.name == template_data["name"]
-            ).first()
-            
-            if not existing:
-                placeholders = _extract_placeholders(template_data["template_content"])
-                
-                template = ContentTemplate(
-                    name=template_data["name"],
-                    description=template_data["description"],
-                    template_content=template_data["template_content"],
-                    category=template_data["category"],
-                    template_type=template_data["template_type"],
-                    industry=template_data["industry"],
-                    is_public=template_data["is_public"],
-                    tags=template_data["tags"],
-                    placeholders=placeholders,
-                    created_by=current_user.id,
-                    usage_count=0
-                )
-                
-                db.add(template)
-                created_count += 1
-        
-        db.commit()
+        template_service = TemplateService(db)
+        created_count = template_service.seed_default_templates(current_user.id)
         
         return {"message": f"Created {created_count} default templates"}
         
@@ -658,12 +526,120 @@ async def seed_default_templates(
         raise HTTPException(status_code=500, detail="Default template seeding failed")
 
 
-async def _increment_template_usage(template_id: str, db: Session):
-    """Increment template usage count in background"""
+@router.get("/stats", response_model=TemplateStatsResponse)
+async def get_template_stats(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get overall template statistics"""
     try:
-        template = db.query(ContentTemplate).filter(ContentTemplate.id == template_id).first()
-        if template:
-            template.usage_count += 1
-            db.commit()
+        template_service = TemplateService(db)
+        stats_data = template_service.get_template_stats()
+        
+        return TemplateStatsResponse(**stats_data)
+        
     except Exception as e:
-        logger.error(f"Failed to increment template usage: {str(e)}")
+        logger.error(f"Template stats failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Template stats failed")
+
+
+@router.post("/{template_id}/rate", response_model=TemplateRatingResponse)
+async def rate_template(
+    template_id: str,
+    request: TemplateRatingRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Rate a template"""
+    try:
+        # Rate limiting
+        await rate_limiter.check_rate_limit(f"template_rate:{current_user.id}")
+        
+        # Check if template exists and is accessible
+        template = db.query(ContentTemplate).filter(
+            and_(
+                ContentTemplate.id == template_id,
+                or_(
+                    ContentTemplate.created_by == current_user.id,
+                    ContentTemplate.is_public == True
+                )
+            )
+        ).first()
+        
+        if not template:
+            raise HTTPException(status_code=404, detail="Template not found")
+        
+        template_service = TemplateService(db)
+        success = template_service.rate_template(
+            template_id, 
+            current_user.id, 
+            request.rating, 
+            request.comment
+        )
+        
+        if not success:
+            raise HTTPException(status_code=500, detail="Failed to rate template")
+        
+        # Get updated analytics to return current rating info
+        analytics_data = template_service.get_template_analytics(template_id, template.created_by)
+        
+        return TemplateRatingResponse(
+            template_id=template_id,
+            user_rating=request.rating,
+            comment=request.comment,
+            average_rating=analytics_data.get("average_rating", 0.0) if analytics_data else 0.0,
+            total_ratings=analytics_data.get("total_ratings", 0) if analytics_data else 0,
+            created_at=datetime.utcnow()
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Template rating failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Template rating failed")
+
+
+@router.get("/popular", response_model=TemplateListResponse)
+async def get_popular_templates(
+    limit: int = Query(10, ge=1, le=50),
+    category: Optional[str] = Query(None),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get popular templates based on usage count"""
+    try:
+        template_service = TemplateService(db)
+        popular_templates = template_service.get_popular_templates(limit=limit, category=category)
+        
+        # Convert to response format
+        template_responses = [
+            TemplateResponse(
+                id=str(template.id),
+                name=template.name,
+                description=template.description,
+                template_content=template.template_content,
+                category=template.category,
+                template_type=template.template_type,
+                industry=template.industry,
+                is_public=template.is_public,
+                tags=template.tags or [],
+                usage_count=template.usage_count,
+                created_by=str(template.created_by),
+                created_at=template.created_at,
+                updated_at=template.updated_at
+            )
+            for template in popular_templates
+        ]
+        
+        return TemplateListResponse(
+            templates=template_responses,
+            total=len(template_responses),
+            page=1,
+            per_page=limit,
+            has_next=False,
+            has_prev=False
+        )
+        
+    except Exception as e:
+        logger.error(f"Popular templates failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Popular templates failed")

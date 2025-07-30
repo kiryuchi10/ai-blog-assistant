@@ -31,6 +31,7 @@ class User(Base):
     blog_posts = relationship("BlogPost", back_populates="user", cascade="all, delete-orphan")
     scheduled_posts = relationship("ScheduledPost", back_populates="user", cascade="all, delete-orphan")
     platform_integrations = relationship("PlatformIntegration", back_populates="user", cascade="all, delete-orphan")
+    templates = relationship("ContentTemplate", back_populates="creator", cascade="all, delete-orphan")
     
     def __repr__(self):
         return f"<User(id={self.id}, email={self.email})>"

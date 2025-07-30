@@ -85,14 +85,21 @@ class ContentTemplate(Base):
     description = Column(Text)
     template_content = Column(Text, nullable=False)
     category = Column(String(100))  # how-to, listicle, review, comparison, etc.
+    template_type = Column(String(50), default='article')  # article, how_to, listicle, etc.
     industry = Column(String(100))  # tech, health, finance, lifestyle, etc.
     tone = Column(String(50), default='professional')
     is_public = Column(Boolean, default=False)
     usage_count = Column(Integer, default=0)
     variables = Column(JSON)  # Template variables for customization
     seo_guidelines = Column(JSON)  # SEO recommendations for this template type
+    tags = Column(JSON)  # Template tags for categorization
+    placeholders = Column(JSON)  # Extracted placeholders from template content
+    created_by = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    
+    # Relationships
+    creator = relationship("User", back_populates="templates")
     
     def __repr__(self):
         return f"<ContentTemplate(name={self.name}, category={self.category})>"
@@ -100,3 +107,43 @@ class ContentTemplate(Base):
     def increment_usage(self):
         """Increment usage counter when template is used"""
         self.usage_count += 1
+
+
+class TemplateUsage(Base):
+    """Template usage tracking for analytics and popularity metrics"""
+    __tablename__ = "template_usage"
+    
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    template_id = Column(String(36), ForeignKey("content_templates.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    variables_used = Column(JSON)  # Variables that were replaced in the template
+    industry_context = Column(String(100))  # Industry context when template was used
+    usage_context = Column(String(200))  # Context or purpose of usage
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    # Relationships
+    template = relationship("ContentTemplate")
+    user = relationship("User")
+    
+    def __repr__(self):
+        return f"<TemplateUsage(template_id={self.template_id}, user_id={self.user_id})>"
+
+
+class TemplateRating(Base):
+    """Template ratings and reviews for quality metrics"""
+    __tablename__ = "template_ratings"
+    
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    template_id = Column(String(36), ForeignKey("content_templates.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    rating = Column(Integer, nullable=False)  # 1-5 stars
+    comment = Column(Text)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    
+    # Relationships
+    template = relationship("ContentTemplate")
+    user = relationship("User")
+    
+    def __repr__(self):
+        return f"<TemplateRating(template_id={self.template_id}, rating={self.rating})>"
